@@ -1,0 +1,53 @@
+services:
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: redocmi
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pq_isready -U postgres -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  train_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: train_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: redocmi
+    ports:
+      - "5433:5432"
+    volumes:
+      - train_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pq_isready -U postgres -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  booking_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: booking_db
+      POSTGRES_USER: booking_user
+      POSTGRES_PASSWORD: booking_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - booking_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U booking_user -d booking_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  auth_db_data:
+  train_db_data:
+  booking_db_data:
