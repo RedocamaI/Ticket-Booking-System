@@ -12,3 +12,6 @@ target/
 .idea/
 *.iml
 .vscode/
+
+# Application properties for local
+**/application-local.properties
