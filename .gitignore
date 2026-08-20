@@ -1,0 +1,14 @@
+# Local issue tracker
+ISSUES.md
+
+# Environment
+.env
+
+# Maven
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
