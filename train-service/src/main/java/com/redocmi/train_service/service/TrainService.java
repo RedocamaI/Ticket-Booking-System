@@ -3,6 +3,7 @@ package com.redocmi.train_service.service;
 import com.redocmi.train_service.dto.request.CreateScheduleRequest;
 import com.redocmi.train_service.dto.request.CreateTrainRequest;
 import com.redocmi.train_service.dto.response.ScheduleResponse;
+import com.redocmi.train_service.dto.response.SeatResponse;
 import com.redocmi.train_service.dto.response.TrainResponse;
 import com.redocmi.train_service.dto.response.TrainSearchResponse;
 import com.redocmi.train_service.entity.Schedule;
@@ -10,6 +11,7 @@ import com.redocmi.train_service.entity.Seat;
 import com.redocmi.train_service.entity.Train;
 import com.redocmi.train_service.exception.DuplicateTrainException;
 import com.redocmi.train_service.exception.ResourceNotFoundException;
+import com.redocmi.train_service.exception.SeatNotAvailableException;
 import com.redocmi.train_service.repository.ScheduleRepository;
 import com.redocmi.train_service.repository.SeatRepository;
 import com.redocmi.train_service.repository.TrainRepository;
@@ -177,5 +179,66 @@ public class TrainService {
                             .build();
                 })
                 .toList();
+    }
+
+    public List<SeatResponse> getSeatsByScheduleId(UUID scheduleId) {
+        // verify if the schedule exists:
+        scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("shcedule with id " + scheduleId + " does not exist"));
+
+        return seatRepository.findByScheduleIdWithDetails(scheduleId)
+                .stream()
+                .map(this::mapToSeatResponse)
+                .toList();
+    }
+
+    @Transactional
+    public SeatResponse lockSeat(UUID seatId) {
+        Seat seat = seatRepository.findById(seatId)
+                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist"));
+
+        if(seat.getStatus() != Seat.SeatStatus.AVAILABLE)
+            throw new SeatNotAvailableException(
+                    "Seat " + seat.getSeatNumber() + " is not available."
+            );
+
+        seat.setStatus(Seat.SeatStatus.LOCKED);
+        seatRepository.save(seat);
+        log.info("Seat {} locked successfully.", seat.getSeatNumber());
+
+        return mapToSeatResponse(seat);
+    }
+
+    @Transactional
+    public SeatResponse confirmSeat(UUID seatId) {
+        Seat seat = seatRepository.findById(seatId)
+                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist."));
+
+        seat.setStatus(Seat.SeatStatus.BOOKED);
+        seatRepository.save(seat);
+        log.info("Seat {} confirmed successfully.", seat.getSeatNumber());
+
+        return mapToSeatResponse(seat);
+    }
+
+    @Transactional
+    public SeatResponse releaseSeat(UUID seatId) {
+        Seat seat = seatRepository.findById(seatId)
+                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist."));
+
+        seat.setStatus(Seat.SeatStatus.AVAILABLE);
+        seatRepository.save(seat);
+        log.info("Seat {} released successfully", seat.getSeatNumber());
+
+        return mapToSeatResponse(seat);
+    }
+
+    private SeatResponse mapToSeatResponse(Seat seat) {
+        return SeatResponse.builder()
+                .id(seat.getId())
+                .seatNumber(seat.getSeatNumber())
+                .seatClass(seat.getSeatClass().name())
+                .status(seat.getStatus().name())
+                .build();
     }
 }

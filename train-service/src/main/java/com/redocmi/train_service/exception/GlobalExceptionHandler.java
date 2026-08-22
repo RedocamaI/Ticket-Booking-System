@@ -3,6 +3,7 @@ package com.redocmi.train_service.exception;
 import com.redocmi.train_service.dto.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -25,6 +26,21 @@ public class GlobalExceptionHandler{
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(SeatNotAvailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSeatNotAvailable(SeatNotAvailableException exception) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLocking(
+            ObjectOptimisticLockingFailureException exception) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("Seat is no longer available, please select another seat."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
