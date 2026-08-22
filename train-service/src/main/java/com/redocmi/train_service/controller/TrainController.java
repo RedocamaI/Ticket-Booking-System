@@ -5,13 +5,16 @@ import com.redocmi.train_service.dto.request.CreateTrainRequest;
 import com.redocmi.train_service.dto.response.ApiResponse;
 import com.redocmi.train_service.dto.response.ScheduleResponse;
 import com.redocmi.train_service.dto.response.TrainResponse;
+import com.redocmi.train_service.dto.response.TrainSearchResponse;
 import com.redocmi.train_service.service.TrainService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,5 +66,17 @@ public class TrainController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success("Schedule fetched successfully", trainService.getScheduleById(id)));
+    }
+
+    @GetMapping("/trains/search")
+    public ResponseEntity<ApiResponse<List<TrainSearchResponse>>> searchTrains(
+            @RequestParam String source,
+            @RequestParam String destination,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date){
+        List<TrainSearchResponse> results = trainService.searchTrains(source, destination, date);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success("Trains fetched successfully", results));
     }
 }

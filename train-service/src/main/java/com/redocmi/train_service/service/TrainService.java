@@ -4,6 +4,7 @@ import com.redocmi.train_service.dto.request.CreateScheduleRequest;
 import com.redocmi.train_service.dto.request.CreateTrainRequest;
 import com.redocmi.train_service.dto.response.ScheduleResponse;
 import com.redocmi.train_service.dto.response.TrainResponse;
+import com.redocmi.train_service.dto.response.TrainSearchResponse;
 import com.redocmi.train_service.entity.Schedule;
 import com.redocmi.train_service.entity.Seat;
 import com.redocmi.train_service.entity.Train;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -153,4 +155,27 @@ public class TrainService {
                 .build();
     }
 
+    public List<TrainSearchResponse> searchTrains(String source, String destination, LocalDate travelDate) {
+        List<Schedule> schedules = scheduleRepository.searchSchedules(source, destination, travelDate);
+
+        return schedules.stream()
+                .map(schedule -> {
+                    Long availableSeats = seatRepository.countAvailableSeatsByScheduleId(schedule.getId());
+
+                    return TrainSearchResponse.builder()
+                            .scheduleId(schedule.getId())
+                            .trainId(schedule.getTrain().getId())
+                            .trainNumber(schedule.getTrain().getTrainNumber())
+                            .trainName(schedule.getTrain().getName())
+                            .source(schedule.getTrain().getSource())
+                            .destination(schedule.getTrain().getDestination())
+                            .travelDate(schedule.getTravelDate())
+                            .departureTime(schedule.getDepartureTime())
+                            .arrivalTime(schedule.getArrivalTime())
+                            .price(schedule.getPrice())
+                            .availableSeats(availableSeats)
+                            .build();
+                })
+                .toList();
+    }
 }
