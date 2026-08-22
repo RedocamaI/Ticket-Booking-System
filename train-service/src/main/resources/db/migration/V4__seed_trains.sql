@@ -16,16 +16,16 @@ SELECT
     'a1b2c3d4-0000-0000-0000-000000000001'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000001'::uuid,
     'SL-' || LPAD(gs::TEXT, 2, '0'),
-    'SLEEPER'::seat_class,
-    'AVAILABLE'::seat_status
+    'SLEEPER',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs
 UNION ALL
 SELECT
     'a1b2c3d4-0000-0000-0000-000000000001'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000001'::uuid,
     'AC-' || LPAD(gs::TEXT, 2, '0'),
-    'AC'::seat_class,
-    'AVAILABLE'::seat_status
+    'AC',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs;
 
 -- Seats for Shatabdi Express
@@ -34,16 +34,16 @@ SELECT
     'a1b2c3d4-0000-0000-0000-000000000002'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000002'::uuid,
     'SL-' || LPAD(gs::TEXT, 2, '0'),
-    'SLEEPER'::seat_class,
-    'AVAILABLE'::seat_status
+    'SLEEPER',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs
 UNION ALL
 SELECT
     'a1b2c3d4-0000-0000-0000-000000000002'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000002'::uuid,
     'AC-' || LPAD(gs::TEXT, 2, '0'),
-    'AC'::seat_class,
-    'AVAILABLE'::seat_status
+    'AC',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs;
 
 -- Seats for Tamil Nadu Express
@@ -52,14 +52,14 @@ SELECT
     'a1b2c3d4-0000-0000-0000-000000000003'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000003'::uuid,
     'SL-' || LPAD(gs::TEXT, 2, '0'),
-    'SLEEPER'::seat_class,
-    'AVAILABLE'::seat_status
+    'SLEEPER',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs
 UNION ALL
 SELECT
     'a1b2c3d4-0000-0000-0000-000000000003'::uuid,
     'b1b2c3d4-0000-0000-0000-000000000003'::uuid,
     'AC-' || LPAD(gs::TEXT, 2, '0'),
-    'AC'::seat_class,
-    'AVAILABLE'::seat_status
+    'AC',
+    'AVAILABLE'
 FROM generate_series(1, 30) gs;
