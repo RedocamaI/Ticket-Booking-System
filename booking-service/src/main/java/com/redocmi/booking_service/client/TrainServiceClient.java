@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
@@ -22,24 +24,30 @@ public class TrainServiceClient {
     }
 
     public void lockSeat(UUID seatId) {
-        log.info("Locking seat: {}", seatId);
         restClient.patch()
-                .uri("/internal/seats/{seatId}/lock", seatId)
+                .uri("/api/internal/seats/{seatId}/lock", seatId)
                 .retrieve()
-                .onStatus(HttpStatusCode::is4xxClientError, ((request, response) -> {
-                    if(response.getStatusCode().value() == 423) {
-                        throw new SeatNotAvailableException(
-                                "Seat is not available: " + seatId);
-                    }
-                    throw new TrainServiceException(
-                            "Failed to lock seat: " + response.getStatusCode());
-                }))
-                .onStatus(HttpStatusCode::is5xxServerError, ((request, response) -> {
-                    throw new TrainServiceException(
-                            "Train service error while locking the seat: " + seatId);
-                }))
-                .toBodilessEntity();
+                .onStatus(HttpStatusCode::isError, (request, response) -> {
+                    int status = response.getStatusCode().value();
+                    String body = new String(response.getBody().readAllBytes());
+                    String message;
 
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode json = mapper.readTree(body);
+                        message = json.path("message").asString("Train service error");
+                    } catch (Exception exception) {
+                        message = "Train service error: " + status;
+                    }
+
+                    if(status == 404) {
+                        throw new SeatNotAvailableException(message);
+                    }
+
+                    log.error("Error from train-service: status={}, body={}", status, message);
+                    throw new TrainServiceException(message);
+                })
+                .toBodilessEntity();
         log.info("Seat locked successfully: {}", seatId);
     }
 
