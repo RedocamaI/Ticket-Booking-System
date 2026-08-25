@@ -42,6 +42,20 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(exception.getMessage()));
     }
 
+    @ExceptionHandler(BookingNotPendingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBookingNotPending(BookingNotPendingException exception) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(exception.getMessage()));
+    }
+
+    @ExceptionHandler(BookingExpiredException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBookingExpired(BookingExpiredException exception) {
+        return ResponseEntity
+                .status(HttpStatus.GONE)
+                .body(ApiResponse.error(exception.getMessage()));
+    }
+
     @ExceptionHandler(MethodInvocationException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(
             MethodArgumentNotValidException exception) {

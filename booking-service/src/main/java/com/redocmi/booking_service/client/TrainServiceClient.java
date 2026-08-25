@@ -54,7 +54,7 @@ public class TrainServiceClient {
     public void confirmSeat(UUID seatId) {
         log.info("Confirming seat: {}", seatId);
         restClient.patch()
-                .uri("/internal/seats/{seatId}/confirm", seatId)
+                .uri("/api/internal/seats/{seatId}/confirm", seatId)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, ((request, response) -> {
                     throw new TrainServiceException(

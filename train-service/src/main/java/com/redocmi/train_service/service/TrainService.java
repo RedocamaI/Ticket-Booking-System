@@ -184,7 +184,7 @@ public class TrainService {
     public List<SeatResponse> getSeatsByScheduleId(UUID scheduleId) {
         // verify if the schedule exists:
         scheduleRepository.findById(scheduleId)
-                .orElseThrow(() -> new ResourceNotFoundException("shcedule with id " + scheduleId + " does not exist"));
+                .orElseThrow(() -> new ResourceNotFoundException("schedule with id " + scheduleId + " does not exist"));
 
         return seatRepository.findByScheduleIdWithDetails(scheduleId)
                 .stream()
