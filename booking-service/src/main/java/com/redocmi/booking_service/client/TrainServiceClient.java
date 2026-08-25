@@ -72,7 +72,7 @@ public class TrainServiceClient {
     public void releaseSeat(UUID seatId) {
         log.info("Releasing seat: {}", seatId);
         restClient.patch()
-                .uri("/internal/seats/{seatId}/release", seatId)
+                .uri("/api/internal/seats/{seatId}/release", seatId)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, ((request, response) -> {
                     throw new TrainServiceException(
