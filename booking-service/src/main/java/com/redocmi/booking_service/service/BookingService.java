@@ -61,6 +61,7 @@ public class BookingService {
                 .build();
     }
 
+    @Transactional
     public PaymentResponse processPayment(UUID bookingId, UUID userId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking with id: " + bookingId + " does not exist."));
