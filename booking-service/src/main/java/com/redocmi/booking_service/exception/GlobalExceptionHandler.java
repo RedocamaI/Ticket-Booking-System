@@ -56,6 +56,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(exception.getMessage()));
     }
 
+    @ExceptionHandler(BookingNotConfirmedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBookingNotConfirmed(BookingNotConfirmedException exception) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(exception.getMessage()));
+    }
+
     @ExceptionHandler(MethodInvocationException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(
             MethodArgumentNotValidException exception) {
@@ -79,6 +86,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception exception) {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("An unexpected error occurred."));
+                .body(ApiResponse.error("An unexpected error occurred: " + exception.getMessage()));
     }
 }

@@ -6,10 +6,7 @@ import com.redocmi.booking_service.dto.response.BookingResponse;
 import com.redocmi.booking_service.dto.response.PaymentResponse;
 import com.redocmi.booking_service.entity.Booking;
 import com.redocmi.booking_service.entity.Payment;
-import com.redocmi.booking_service.exception.BookingExpiredException;
-import com.redocmi.booking_service.exception.BookingNotPendingException;
-import com.redocmi.booking_service.exception.ResourceNotFoundException;
-import com.redocmi.booking_service.exception.UnauthorizedException;
+import com.redocmi.booking_service.exception.*;
 import com.redocmi.booking_service.repository.BookingRepository;
 import com.redocmi.booking_service.repository.PaymentRepository;
 import jakarta.transaction.Transactional;
@@ -19,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -28,6 +26,26 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
     private final TrainServiceClient trainServiceClient;
+
+    public BookingResponse getBookingById(UUID bookingId, UUID userId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking with id: " + bookingId + " does not exist."));
+
+        if(!booking.getUserId().equals(userId)) {
+            throw new UnauthorizedException(
+                    "User not authorized to view this booking."
+            );
+        }
+
+        return mapToBookingResponse(booking);
+    }
+
+    public List<BookingResponse> getBookingsByUser(UUID userId) {
+        return bookingRepository.findByUserId(userId)
+                .stream()
+                .map(this::mapToBookingResponse)
+                .toList();
+    }
 
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId) {
@@ -47,6 +65,50 @@ public class BookingService {
         Booking savedBooking = bookingRepository.save(booking);
 
         return mapToBookingResponse(savedBooking);
+    }
+
+    public PaymentResponse cancelBooking(UUID bookingId, UUID userId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Booking with id " + bookingId + " does not exist."
+                ));
+
+        log.info("1. found booking.");
+//        verify the ownership:
+        if(!booking.getUserId().equals(userId)) {
+            throw new UnauthorizedException(
+                    "User not authorized to cancle this booking."
+            );
+        }
+
+        log.info("2. user authorized");
+
+        if(booking.getStatus() != Booking.BookingStatus.CONFIRMED) {
+            throw new BookingNotConfirmedException(
+                    "Only confirmed bookings can be cancelled. Current status: " + booking.getStatus()
+            );
+        }
+
+        log.info("3. booking is confirmed, need to cancel it.");
+
+//        cancel the booking:
+        booking.setStatus(Booking.BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
+        trainServiceClient.releaseSeat(booking.getSeatId());
+
+//        create a refund payment record:
+        Payment refundPayment = Payment.builder()
+                .booking(booking)
+                .amount(BigDecimal.valueOf(1500.00))
+                .status(Payment.PaymentStatus.REFUNDED)
+                .gatewayRef(UUID.randomUUID().toString())
+                .paidAt(LocalDateTime.now())
+                .build();
+
+        Payment savedPayment = paymentRepository.save(refundPayment);
+        log.info("Booking {} cancelled and refund created for user {}", bookingId, userId);
+
+        return mapToPaymentResponse(savedPayment);
     }
 
     @Transactional
@@ -107,13 +169,6 @@ public class BookingService {
         }
 
         return mapToPaymentResponse(saved);
-    }
-
-    public BookingResponse getBooking(UUID bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new ResourceNotFoundException("Booking with id: " + bookingId + " does not exist."));
-
-        return mapToBookingResponse(booking);
     }
 
     private BookingResponse mapToBookingResponse(Booking booking) {
