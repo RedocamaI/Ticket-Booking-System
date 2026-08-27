@@ -49,18 +49,6 @@ public class BookingService {
         return mapToBookingResponse(savedBooking);
     }
 
-    private BookingResponse mapToBookingResponse(Booking booking) {
-        return BookingResponse.builder()
-                .id(booking.getId())
-                .userId(booking.getUserId())
-                .scheduleId(booking.getScheduleId())
-                .seatId(booking.getSeatId())
-                .status(booking.getStatus().name())
-                .bookedAt(booking.getBookedAt())
-                .expiresAt(booking.getExpiresAt())
-                .build();
-    }
-
     @Transactional
     public PaymentResponse processPayment(UUID bookingId, UUID userId) {
         Booking booking = bookingRepository.findById(bookingId)
@@ -119,6 +107,25 @@ public class BookingService {
         }
 
         return mapToPaymentResponse(saved);
+    }
+
+    public BookingResponse getBooking(UUID bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking with id: " + bookingId + " does not exist."));
+
+        return mapToBookingResponse(booking);
+    }
+
+    private BookingResponse mapToBookingResponse(Booking booking) {
+        return BookingResponse.builder()
+                .id(booking.getId())
+                .userId(booking.getUserId())
+                .scheduleId(booking.getScheduleId())
+                .seatId(booking.getSeatId())
+                .status(booking.getStatus().name())
+                .bookedAt(booking.getBookedAt())
+                .expiresAt(booking.getExpiresAt())
+                .build();
     }
 
     private PaymentResponse mapToPaymentResponse(Payment payment) {

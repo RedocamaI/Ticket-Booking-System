@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.awt.print.Book;
 import java.util.UUID;
 
 @Slf4j
@@ -22,6 +23,14 @@ import java.util.UUID;
 public class BookingController {
 
     private final BookingService bookingService;
+
+    public ResponseEntity<ApiResponse<BookingResponse>> getBooking(@PathVariable UUID bookingId) {
+        BookingResponse response = bookingService.getBooking(bookingId);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success("Booking " + response.getId() + " fetched successfully.", response));
+    }
 
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
