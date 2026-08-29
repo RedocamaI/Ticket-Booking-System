@@ -45,7 +45,7 @@ public class BookingController {
     @PatchMapping("{bookingId}/cancel")
     public ResponseEntity<ApiResponse<PaymentResponse>> cancelBooking(@PathVariable UUID bookingId,
                                                                       @RequestHeader("X-User-Id") UUID userId) {
-        log.info("0. initiating cancel booking.");
+        log.info("Initiating cancel booking.");
         PaymentResponse refundPayment = bookingService.cancelBooking(bookingId, userId);
 
         return ResponseEntity

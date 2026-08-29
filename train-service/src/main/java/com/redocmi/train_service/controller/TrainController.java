@@ -47,14 +47,14 @@ public class TrainController {
     }
 
     // Public endpoints:
-    @GetMapping("/train/{id}")
+    @GetMapping("/trains/{id}")
     public ResponseEntity<ApiResponse<TrainResponse>> getTrainById(@PathVariable UUID id) {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success("Train fetched successfully", trainService.getTrainById(id)));
     }
 
-    @GetMapping("/train/all-trains")
+    @GetMapping("/trains/all-trains")
     public ResponseEntity<ApiResponse<List<TrainResponse>>> getAllTrains() {
         return ResponseEntity
                 .status(HttpStatus.OK)

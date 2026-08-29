@@ -73,15 +73,15 @@ public class BookingService {
                         "Booking with id " + bookingId + " does not exist."
                 ));
 
-        log.info("1. found booking.");
+        log.info("Booking fetched successfully.");
 //        verify the ownership:
         if(!booking.getUserId().equals(userId)) {
             throw new UnauthorizedException(
-                    "User not authorized to cancle this booking."
+                    "User not authorized to cancel this booking."
             );
         }
 
-        log.info("2. user authorized");
+        log.info("User authorized successfully: {}", userId);
 
         if(booking.getStatus() != Booking.BookingStatus.CONFIRMED) {
             throw new BookingNotConfirmedException(

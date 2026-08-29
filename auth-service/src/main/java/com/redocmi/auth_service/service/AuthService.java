@@ -8,11 +8,13 @@ import com.redocmi.auth_service.exception.EmailAlreadyExistsException;
 import com.redocmi.auth_service.exception.ResourceNotFoundException;
 import com.redocmi.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -29,16 +31,17 @@ public class AuthService {
                 .name(registerRequest.getName())
                 .email(registerRequest.getEmail())
                 .passwordHash(passwordEncoder.encode(registerRequest.getPassword()))
-                .role(User.Role.USER)
+                .role(User.Role.ADMIN)
                 .build();
 
         User savedUser = userRepository.save(user);
+        log.info("saved user: {}", user);
         String token = jwtService.generateToken(savedUser);
 
         return AuthResponse.builder()
                 .userId(savedUser.getId())
                 .email(savedUser.getEmail())
-                .role("USER")
+                .role(user.getRole().name())
                 .token(token)
                 .build();
     }

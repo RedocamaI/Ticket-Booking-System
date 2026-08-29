@@ -19,7 +19,7 @@ public class BookingExpiryScheduler {
     private final BookingRepository bookingRepository;
     private final TrainServiceClient trainServiceClient;
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelay = 300000)
     @Transactional
     public void expireStaleBookings() {
         log.info("running booking expiry scheduler at: {}", LocalDateTime.now());
