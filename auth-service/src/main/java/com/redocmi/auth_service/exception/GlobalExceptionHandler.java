@@ -24,7 +24,7 @@ public class GlobalExceptionHandler{
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<ApiResponse<Void>> handleEmailExists(EmailAlreadyExistsException exception) {
         return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
+                .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(exception.getMessage()));
     }
 
