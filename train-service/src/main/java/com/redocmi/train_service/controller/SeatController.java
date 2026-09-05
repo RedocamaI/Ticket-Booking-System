@@ -3,6 +3,8 @@ package com.redocmi.train_service.controller;
 import com.redocmi.train_service.dto.response.ApiResponse;
 import com.redocmi.train_service.dto.response.SeatResponse;
 import com.redocmi.train_service.service.TrainService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,9 +18,13 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/")
+@Tag(name = "Seats", description = "Seats availability")
 public class SeatController {
     private final TrainService trainService;
 
+    @Operation(summary = "Get all seats for a schedule")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200", description = "Seats fetched successfully")
     @GetMapping("/schedules/{scheduleId}/seats")
     public ResponseEntity<ApiResponse<List<SeatResponse>>> getSeatsBySchedule(@PathVariable UUID scheduleId) {
         List<SeatResponse> seats = trainService.getSeatsByScheduleId(scheduleId);

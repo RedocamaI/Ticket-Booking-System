@@ -7,6 +7,9 @@ import com.redocmi.train_service.dto.response.ScheduleResponse;
 import com.redocmi.train_service.dto.response.TrainResponse;
 import com.redocmi.train_service.dto.response.TrainSearchResponse;
 import com.redocmi.train_service.service.TrainService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -21,10 +24,18 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/")
+@Tag(name = "Trains", description = "Train and schedule management")
 public class TrainController {
     private final TrainService trainService;
 
     // admin endpoints:
+    @Operation(summary = "create a new train(admin only")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "Train created successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "Train number already exists")
+    })
     @PostMapping("/admin/create-train")
     public ResponseEntity<ApiResponse<TrainResponse>> createTrain(
             @Valid @RequestBody CreateTrainRequest request) {
@@ -35,6 +46,13 @@ public class TrainController {
                 .body(ApiResponse.success("Train created successfully", trainResponse));
     }
 
+    @Operation(summary = "create a schedule and auto-generate seats (admin only)")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "Schedule created with seats"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "Train not found")
+    })
     @PostMapping("/admin/create-schedule")
     public ResponseEntity<ApiResponse<ScheduleResponse>> createSchedule(
             @Valid @RequestBody CreateScheduleRequest request) {
@@ -47,6 +65,7 @@ public class TrainController {
     }
 
     // Public endpoints:
+    @Operation(summary = "Get train by ID")
     @GetMapping("/trains/{id}")
     public ResponseEntity<ApiResponse<TrainResponse>> getTrainById(@PathVariable UUID id) {
         return ResponseEntity
@@ -54,6 +73,7 @@ public class TrainController {
                 .body(ApiResponse.success("Train fetched successfully", trainService.getTrainById(id)));
     }
 
+    @Operation(summary = "Get all trains")
     @GetMapping("/trains/all-trains")
     public ResponseEntity<ApiResponse<List<TrainResponse>>> getAllTrains() {
         return ResponseEntity
@@ -61,6 +81,7 @@ public class TrainController {
                 .body(ApiResponse.success("All trains fetched successfully", trainService.getAllTrains()));
     }
 
+    @Operation(summary = "Get schedule by ID")
     @GetMapping("/schedules/{id}")
     public ResponseEntity<ApiResponse<ScheduleResponse>> getScheduleById(@PathVariable UUID id) {
         return ResponseEntity
@@ -68,6 +89,7 @@ public class TrainController {
                 .body(ApiResponse.success("Schedule fetched successfully", trainService.getScheduleById(id)));
     }
 
+    @Operation(summary = "Search trains by source, destination and date")
     @GetMapping("/trains/search")
     public ResponseEntity<ApiResponse<List<TrainSearchResponse>>> searchTrains(
             @RequestParam String source,
