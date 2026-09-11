@@ -48,7 +48,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
         log.info("authHeader: {}", authHeader);
         if(authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.info("I am the authHeader and here I am null.");
             writeErrorResponse(
                     response, HttpStatus.UNAUTHORIZED, "Authorization header is missing or invalid."
             );
@@ -76,6 +75,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 //        Mutate request to add X-User-Id and X-User-Role header:
         HttpServletRequest mutatedRequest = new HeaderMutatingRequest(request, userId, role);
 
+        response.setHeader("X-RateLimit-Limit",
+                path.startsWith("/api/auth") ? "20" : "100");
         filterChain.doFilter(mutatedRequest, response);
     }
 
