@@ -96,10 +96,13 @@ public class BookingService {
         bookingRepository.save(booking);
         trainServiceClient.releaseSeat(booking.getSeatId());
 
+//        Fetch real price for refund:
+        BigDecimal price = trainServiceClient.getSchedulePrice(booking.getScheduleId());
+
 //        create a refund payment record:
         Payment refundPayment = Payment.builder()
                 .booking(booking)
-                .amount(BigDecimal.valueOf(1500.00))
+                .amount(price)
                 .status(Payment.PaymentStatus.REFUNDED)
                 .gatewayRef(UUID.randomUUID().toString())
                 .paidAt(LocalDateTime.now())
@@ -128,7 +131,12 @@ public class BookingService {
             throw new BookingExpiredException("Booking has expired: " + bookingId);
         }
 
-//        simulate 90% success rate:
+//        Fetch the real price from train service
+        BigDecimal price = trainServiceClient.getSchedulePrice(booking.getScheduleId());
+        log.info("Fetched price {} for schedule {}", price, booking.getScheduleId());
+
+//        simulate 90% success rate: hardcoded for now,
+//        will build with complete payment gateway in the future.
         boolean paymentSuccess = Math.random() < 0.9;
         log.info("Payment simulation result for booking {} : {}", bookingId,
                 paymentSuccess ? "SUCCESS" : "FAILED");
@@ -143,7 +151,7 @@ public class BookingService {
 
             Payment payment = Payment.builder()
                     .booking(booking)
-                    .amount(BigDecimal.valueOf(1500.00))
+                    .amount(price)
                     .status(Payment.PaymentStatus.SUCCESS)
                     .gatewayRef(UUID.randomUUID().toString())
                     .paidAt(LocalDateTime.now())
@@ -158,7 +166,7 @@ public class BookingService {
 
             Payment payment = Payment.builder()
                     .booking(booking)
-                    .amount(BigDecimal.valueOf(1500.00))
+                    .amount(price)
                     .status(Payment.PaymentStatus.FAILED)
                     .gatewayRef(UUID.randomUUID().toString())
                     .paidAt(LocalDateTime.now())
@@ -188,7 +196,8 @@ public class BookingService {
                 .id(payment.getId())
                 .bookingId(payment.getBooking().getId())
                 .amount(payment.getAmount())
-                .status(payment.getGatewayRef())
+                .status(payment.getStatus().name())
+                .gatewayRef(payment.getGatewayRef())
                 .paidAt(payment.getPaidAt())
                 .build();
     }

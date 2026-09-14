@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,5 +66,14 @@ public class SeatController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success("seat " + seatResponse.getSeatNumber() + " released", seatResponse));
+    }
+
+    @GetMapping("/internal/schedules/{scheduleId}/price")
+    public ResponseEntity<ApiResponse<BigDecimal>> getSchedulePrice(@PathVariable UUID scheduleId) {
+        BigDecimal price = trainService.getSchedulePrice(scheduleId);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success("Price fetched successfully", price));
     }
 }

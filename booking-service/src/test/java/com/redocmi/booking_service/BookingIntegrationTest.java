@@ -86,6 +86,8 @@ public class BookingIntegrationTest {
                 .isEqualTo(Booking.BookingStatus.PENDING);
     }
 
+//    need to add two more test case to simulate successful and unsuccessful payment.
+
     @Test
     void createBooking_shouldFail_whenSeatNotAvailable() throws Exception{
         doThrow(new SeatNotAvailableException(("Seat not available")))

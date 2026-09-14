@@ -1,15 +1,18 @@
 package com.redocmi.booking_service.client;
 
+import com.redocmi.booking_service.dto.response.ApiResponse;
 import com.redocmi.booking_service.exception.SeatNotAvailableException;
 import com.redocmi.booking_service.exception.TrainServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Slf4j
@@ -85,5 +88,19 @@ public class TrainServiceClient {
                 .toBodilessEntity();
 
         log.info("Seat released successfully: {}", seatId);
+    }
+
+    public BigDecimal getSchedulePrice(UUID scheduleId) {
+        log.info("Fetching price for schedule: {}", scheduleId);
+        ApiResponse<BigDecimal> response = restClient.get()
+                .uri("/api/internal/schedules/{scheduleId}/price", scheduleId)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, ((request, res) -> {
+                    log.error("Error fetching schedule price: {}", res.getStatusCode().value());
+                    throw new TrainServiceException("Failed to fetch schedule price: " + scheduleId);
+                }))
+                .body(new ParameterizedTypeReference<ApiResponse<BigDecimal>>() {});
+
+        return response != null ? response.getData() : BigDecimal.ZERO;
     }
 }

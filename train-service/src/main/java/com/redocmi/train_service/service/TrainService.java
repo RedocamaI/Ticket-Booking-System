@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -240,5 +241,13 @@ public class TrainService {
                 .seatClass(seat.getSeatClass().name())
                 .status(seat.getStatus().name())
                 .build();
+    }
+
+    public BigDecimal getSchedulePrice(UUID scheduleId) {
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Schedule with id: " + scheduleId + " does not exist."));
+        log.info("schedule price fetched successfully: {}", schedule.getPrice());
+
+        return schedule.getPrice();
     }
 }
