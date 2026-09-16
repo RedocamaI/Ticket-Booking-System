@@ -3,6 +3,7 @@ package com.redocmi.booking_service.service;
 import com.redocmi.booking_service.client.TrainServiceClient;
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
 import com.redocmi.booking_service.dto.response.BookingResponse;
+import com.redocmi.booking_service.dto.response.PageResponse;
 import com.redocmi.booking_service.dto.response.PaymentResponse;
 import com.redocmi.booking_service.entity.Booking;
 import com.redocmi.booking_service.entity.Payment;
@@ -12,6 +13,10 @@ import com.redocmi.booking_service.repository.PaymentRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -40,11 +45,25 @@ public class BookingService {
         return mapToBookingResponse(booking);
     }
 
-    public List<BookingResponse> getBookingsByUser(UUID userId) {
-        return bookingRepository.findByUserId(userId)
+    public PageResponse<BookingResponse> getBookingsByUser(UUID userId, int page, int size) {
+        int cappedSize = Math.min(size, 10);
+        Pageable pageable = PageRequest.of(page, cappedSize, Sort.by(Sort.Direction.DESC, "bookedAt"));
+
+        Page<Booking> bookingPage = bookingRepository.findByUserId(userId, pageable);
+
+        List<BookingResponse> content = bookingPage.getContent()
                 .stream()
                 .map(this::mapToBookingResponse)
                 .toList();
+
+        return PageResponse.<BookingResponse>builder()
+                .content(content)
+                .page(bookingPage.getNumber())
+                .size(bookingPage.getSize())
+                .totalElements(bookingPage.getTotalElements())
+                .totalPages(bookingPage.getTotalPages())
+                .last(bookingPage.isLast())
+                .build();
     }
 
     @Transactional

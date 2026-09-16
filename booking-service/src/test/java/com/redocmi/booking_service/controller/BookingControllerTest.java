@@ -2,6 +2,7 @@ package com.redocmi.booking_service.controller;
 
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
 import com.redocmi.booking_service.dto.response.BookingResponse;
+import com.redocmi.booking_service.dto.response.PageResponse;
 import com.redocmi.booking_service.dto.response.PaymentResponse;
 import com.redocmi.booking_service.exception.BookingNotConfirmedException;
 import com.redocmi.booking_service.exception.SeatNotAvailableException;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -100,26 +102,38 @@ public class BookingControllerTest {
 
     @Test
     void getBookings_shouldReturnList() throws Exception {
-        List<BookingResponse> mockResponse = List.of(
-                BookingResponse.builder()
-                        .id(UUID.randomUUID())
-                        .userId(userId)
-                        .scheduleId(scheduleId)
-                        .seatId(seatId)
-                        .status("CONFIRMED")
-                        .bookedAt(LocalDateTime.now())
-                        .expiresAt(LocalDateTime.now().plusMinutes(10))
-                        .build()
-        );
+        PageResponse<BookingResponse> mockResponse = PageResponse.<BookingResponse>builder()
+                    .content(List.of(
+                    BookingResponse.builder()
+                            .id(UUID.randomUUID())
+                            .userId(userId)
+                            .scheduleId(scheduleId)
+                            .seatId(seatId)
+                            .status("CONFIRMED")
+                            .bookedAt(LocalDateTime.now())
+                            .expiresAt(LocalDateTime.now().plusMinutes(10))
+                            .build()
+                    ))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
 
-        when(bookingService.getBookingsByUser(any(UUID.class)))
+        when(bookingService.getBookingsByUser(any(UUID.class), anyInt(), anyInt()))
                 .thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/bookings/")
                 .header("X-User-Id", userId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(jsonPath("$.data..content.length()").value(1))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(10))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.last").value(true));
     }
 
     @Test

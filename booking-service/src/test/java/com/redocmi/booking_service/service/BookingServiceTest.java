@@ -3,6 +3,7 @@ package com.redocmi.booking_service.service;
 import com.redocmi.booking_service.client.TrainServiceClient;
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
 import com.redocmi.booking_service.dto.response.BookingResponse;
+import com.redocmi.booking_service.dto.response.PageResponse;
 import com.redocmi.booking_service.entity.Booking;
 import com.redocmi.booking_service.exception.BookingExpiredException;
 import com.redocmi.booking_service.exception.BookingNotConfirmedException;
@@ -14,7 +15,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 
+import org.springframework.data.domain.Pageable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -93,12 +97,16 @@ public class BookingServiceTest {
                 .bookedAt(LocalDateTime.now())
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .build();
-        when(bookingRepository.findByUserId(userId)).thenReturn(List.of(booking));
+        Page<Booking> page = new PageImpl<>(List.of(booking));
+        when(bookingRepository.findByUserId(any(UUID.class), any(Pageable.class)))
+                .thenReturn(page);
 
-        List<BookingResponse> mockResponse = bookingService.getBookingsByUser(userId);
+        PageResponse<BookingResponse> mockResponse = bookingService.getBookingsByUser(userId, 0 , 10);
 
-        assertThat(mockResponse).hasSize(1);
-        assertThat(mockResponse.getFirst().getStatus()).isEqualTo("CONFIRMED");
+        assertThat(mockResponse.getContent()).hasSize(1);
+        assertThat(mockResponse.getTotalElements()).isEqualTo(1);
+        assertThat(mockResponse.getPage()).isEqualTo(0);
+        assertThat(mockResponse.isLast()).isTrue();
     }
 
     @Test
