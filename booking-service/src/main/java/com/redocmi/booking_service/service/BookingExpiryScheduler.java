@@ -39,9 +39,12 @@ public class BookingExpiryScheduler {
                 booking.setStatus(Booking.BookingStatus.CANCELLED);
                 bookingRepository.save(booking);
 
-                trainServiceClient.releaseSeat(booking.getSeatId());
+//                Release all seats for this booking
+                if(!booking.getSeatIds().isEmpty()) {
+                    trainServiceClient.releaseSeats(booking.getSeatIds());
+                }
 
-                log.info("Expired booking {} cancelled and seat {} release.", booking.getId(), booking.getSeatId());
+                log.info("Expired booking {} cancelled and {} seats released.", booking.getId(), booking.getSeatIds().size());
             } catch (Exception exception) {
                 log.error("Failed to expire the booking {}:{}", booking.getId(), exception.getMessage());
             }

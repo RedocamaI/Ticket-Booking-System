@@ -194,44 +194,59 @@ public class TrainService {
     }
 
     @Transactional
-    public SeatResponse lockSeat(UUID seatId) {
-        Seat seat = seatRepository.findById(seatId)
-                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist"));
+    public List<SeatResponse> lockSeats(UUID scheduleId, String seatClass, Integer quantity) {
+//        verify if schedule exists:
+        log.info("TrainService - scheduleId: {}", scheduleId);
+        scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Schedule " + scheduleId + " does not exist"
+                ));
 
-        if(seat.getStatus() != Seat.SeatStatus.AVAILABLE)
+        log.info("hi1");
+//        find and lock seats automatically using SELECT FOR UPDATE SKIP LOCKED
+        List<UUID> seatIds = seatRepository
+                .findAndLockAvailableSeats(scheduleId, seatClass, quantity);
+
+        log.info("hi2");
+        if(seatIds.size() < quantity) {
             throw new SeatNotAvailableException(
-                    "Seat " + seat.getSeatNumber() + " is not available."
-            );
+                    "Not enough seats available. Requested: " + quantity +
+                            ", Available: " + seatIds.size());
+        }
 
-        seat.setStatus(Seat.SeatStatus.LOCKED);
-        seatRepository.save(seat);
-        log.info("Seat {} locked successfully.", seat.getSeatNumber());
+//        update status to LOCKED
+        List<Seat> seats = seatRepository.findAllById(seatIds).stream()
+                        .peek(seat -> seat.setStatus(Seat.SeatStatus.LOCKED))
+                                .toList();
+        seatRepository.saveAll(seats);
 
-        return mapToSeatResponse(seat);
+        log.info("Locked {} seats for schedule {}", seats.size(), scheduleId);
+        return seats.stream().map(this::mapToSeatResponse).toList();
     }
 
     @Transactional
-    public SeatResponse confirmSeat(UUID seatId) {
-        Seat seat = seatRepository.findById(seatId)
-                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist."));
+    public List<SeatResponse> confirmSeats(List<UUID> seatIds) {
+        List<Seat> seats = seatRepository.findAllById(seatIds).stream()
+                .peek(seat -> seat.setStatus(Seat.SeatStatus.BOOKED))
+                .toList();
+        seatRepository.saveAll(seats);
 
-        seat.setStatus(Seat.SeatStatus.BOOKED);
-        seatRepository.save(seat);
-        log.info("Seat {} confirmed successfully.", seat.getSeatNumber());
+        log.info("Confirmed {} seats", seats.size());
 
-        return mapToSeatResponse(seat);
+        return seats.stream().map(this::mapToSeatResponse).toList();
     }
 
     @Transactional
-    public SeatResponse releaseSeat(UUID seatId) {
-        Seat seat = seatRepository.findById(seatId)
-                .orElseThrow(() -> new ResourceNotFoundException("Seat with id: " + seatId + " does not exist."));
+    public List<SeatResponse> releaseSeats(List<UUID> seatIds) {
+        log.info("SeatIds: {}", seatIds);
+        List<Seat> seats = seatRepository.findAllById(seatIds).stream()
+                .peek(seat -> seat.setStatus(Seat.SeatStatus.AVAILABLE))
+                .toList();
+        seatRepository.saveAll(seats);
 
-        seat.setStatus(Seat.SeatStatus.AVAILABLE);
-        seatRepository.save(seat);
-        log.info("Seat {} released successfully", seat.getSeatNumber());
+        log.info("Released {} seats", seats.size());
 
-        return mapToSeatResponse(seat);
+        return seats.stream().map(this::mapToSeatResponse).toList();
     }
 
     private SeatResponse mapToSeatResponse(Seat seat) {

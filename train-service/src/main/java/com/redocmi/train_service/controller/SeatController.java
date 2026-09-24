@@ -1,7 +1,10 @@
 package com.redocmi.train_service.controller;
 
+import com.redocmi.train_service.dto.request.BatchSeatRequest;
+import com.redocmi.train_service.dto.request.SeatIdsRequest;
 import com.redocmi.train_service.dto.response.ApiResponse;
 import com.redocmi.train_service.dto.response.SeatResponse;
+import com.redocmi.train_service.entity.Seat;
 import com.redocmi.train_service.service.TrainService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,37 +38,39 @@ public class SeatController {
                 .body(ApiResponse.success("seats fetched successfully", seats));
     }
 
-    @PatchMapping("/internal/seats/{seatId}/lock")
-    public ResponseEntity<ApiResponse<SeatResponse>> lockSeat(@PathVariable UUID seatId) {
-        SeatResponse seatResponse = trainService.lockSeat(seatId);
+    @Operation(summary = "Lock multiple seats atomically - internal use only")
+    @PatchMapping("/internal/seats/lock-batch")
+    public ResponseEntity<ApiResponse<List<SeatResponse>>> lockSeats(@RequestBody BatchSeatRequest request) {
+        log.info("SeatController - scheduleId: {}", request.getScheduleId());
+        List<SeatResponse> seats = trainService.lockSeats(
+                request.getScheduleId(),
+                request.getSeatClass(),
+                request.getQuantity());
 
-//        we must return OK here: specifically a 2XX status since this will be handled to
-//        confirm if a seat was locked for that specific time frame by us.
-//        earlier we were using 423 which means the resource we are trying to update is LOCKED
-//        but, we just locked it ourselves in the current request; so 423 seems paradoxical!
-//        one moment we were trying to lock it then we returned 423 to indicate that we were
-//        able to successfully lock but 423 means it was already locked for us.
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(ApiResponse.success("seat " + seatId + " locked successfully", seatResponse));
+                .body(ApiResponse.success("seat locked successfully: ", seats));
     }
 
-    @PatchMapping("/internal/seats/{seatId}/confirm")
-    public ResponseEntity<ApiResponse<SeatResponse>> confirmSeat(@PathVariable UUID seatId) {
-        SeatResponse seatResponse = trainService.confirmSeat(seatId);
+    @Operation(summary = "Confirm multiple seats - internal use only")
+    @PatchMapping("/internal/seats/confirm-batch")
+    public ResponseEntity<ApiResponse<List<SeatResponse>>> confirmSeats(@RequestBody SeatIdsRequest seatIdsRequest) {
+        List<SeatResponse> confirmedSeats = trainService.confirmSeats(seatIdsRequest.getSeatIds());
 
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(ApiResponse.success("seat " + seatResponse.getSeatNumber() + " confirmed", seatResponse));
+                .body(ApiResponse.success("seats confirmed successfully: ", confirmedSeats));
     }
 
-    @PatchMapping("/internal/seats/{seatId}/release")
-    public ResponseEntity<ApiResponse<SeatResponse>> releaseSeat(@PathVariable UUID seatId) {
-        SeatResponse seatResponse = trainService.releaseSeat(seatId);
+    @Operation(summary = "Release multiple seats - internal use only")
+    @PatchMapping("/internal/seats/release-batch")
+    public ResponseEntity<ApiResponse<List<SeatResponse>>> releaseSeat(@RequestBody SeatIdsRequest seatIdsRequest) {
+        log.info("SeatIdsRequest: {}", seatIdsRequest);
+        List<SeatResponse> releasedSeats = trainService.releaseSeats(seatIdsRequest.getSeatIds());
 
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(ApiResponse.success("seat " + seatResponse.getSeatNumber() + " released", seatResponse));
+                .body(ApiResponse.success("seats released successfully: ", releasedSeats));
     }
 
     @GetMapping("/internal/schedules/{scheduleId}/price")

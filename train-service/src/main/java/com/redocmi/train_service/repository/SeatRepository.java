@@ -16,4 +16,18 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
 
     @Query("SELECT s FROM Seat s WHERE s.schedule.id = :scheduleId")
     List<Seat> findByScheduleIdWithDetails(@Param("scheduleId") UUID scheduleId);
+
+    @Query(value = """
+        SELECT id FROM seats
+        WHERE schedule_id = :scheduleId
+        AND class = :seatClass
+        AND status = 'AVAILABLE'
+        LIMIT :quantity
+        FOR UPDATE SKIP LOCKED
+        """, nativeQuery = true)
+    List<UUID> findAndLockAvailableSeats(
+            @Param("scheduleId") UUID scheduleId,
+            @Param("seatClass") String seatClass,
+            @Param("quantity") Integer quantity
+    );
 }

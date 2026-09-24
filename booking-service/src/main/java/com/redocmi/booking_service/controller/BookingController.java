@@ -1,10 +1,7 @@
 package com.redocmi.booking_service.controller;
 
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
-import com.redocmi.booking_service.dto.response.ApiResponse;
-import com.redocmi.booking_service.dto.response.BookingResponse;
-import com.redocmi.booking_service.dto.response.PageResponse;
-import com.redocmi.booking_service.dto.response.PaymentResponse;
+import com.redocmi.booking_service.dto.response.*;
 import com.redocmi.booking_service.service.BookingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -30,11 +27,11 @@ public class BookingController {
 
     @Operation(summary = "Get all bookings for the current user")
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<BookingResponse>>> getBookings(
+    public ResponseEntity<ApiResponse<PageResponse<BookingSummaryResponse>>> getBookings(
             @RequestHeader("X-User-Id") UUID userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        PageResponse<BookingResponse> bookings = bookingService.getBookingsByUser(userId, page, size);
+        PageResponse<BookingSummaryResponse> bookings = bookingService.getBookingsByUser(userId, page, size);
 
         return ResponseEntity
                 .status(HttpStatus.OK)

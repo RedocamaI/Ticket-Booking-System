@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -27,8 +29,8 @@ public class Booking {
     @Column(name = "schedule_id", nullable = false)
     private UUID scheduleId;
 
-    @Column(name = "seat_id", nullable = false)
-    private UUID seatId;
+    @Column(nullable = false)
+    private Integer quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -39,6 +41,14 @@ public class Booking {
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
+
+    @ElementCollection
+    @CollectionTable(
+            name = "booking_seats",
+            joinColumns = @JoinColumn(name = "booking_id")
+    )
+    @Column(name = "seat_id")
+    private List<UUID> seatIds = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

@@ -2,9 +2,7 @@ package com.redocmi.booking_service.service;
 
 import com.redocmi.booking_service.client.TrainServiceClient;
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
-import com.redocmi.booking_service.dto.response.BookingResponse;
-import com.redocmi.booking_service.dto.response.PageResponse;
-import com.redocmi.booking_service.dto.response.PaymentResponse;
+import com.redocmi.booking_service.dto.response.*;
 import com.redocmi.booking_service.entity.Booking;
 import com.redocmi.booking_service.entity.Payment;
 import com.redocmi.booking_service.exception.*;
@@ -31,7 +29,9 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
     private final TrainServiceClient trainServiceClient;
+    private final BookingRateLimiter bookingRateLimiter;
 
+    @Transactional
     public BookingResponse getBookingById(UUID bookingId, UUID userId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking with id: " + bookingId + " does not exist."));
@@ -45,18 +45,18 @@ public class BookingService {
         return mapToBookingResponse(booking);
     }
 
-    public PageResponse<BookingResponse> getBookingsByUser(UUID userId, int page, int size) {
+    public PageResponse<BookingSummaryResponse> getBookingsByUser(UUID userId, int page, int size) {
         int cappedSize = Math.min(size, 10);
         Pageable pageable = PageRequest.of(page, cappedSize, Sort.by(Sort.Direction.DESC, "bookedAt"));
 
         Page<Booking> bookingPage = bookingRepository.findByUserId(userId, pageable);
 
-        List<BookingResponse> content = bookingPage.getContent()
+        List<BookingSummaryResponse> content = bookingPage.getContent()
                 .stream()
-                .map(this::mapToBookingResponse)
+                .map(this::mapToBookingSummaryResponse)
                 .toList();
 
-        return PageResponse.<BookingResponse>builder()
+        return PageResponse.<BookingSummaryResponse>builder()
                 .content(content)
                 .page(bookingPage.getNumber())
                 .size(bookingPage.getSize())
@@ -68,24 +68,36 @@ public class BookingService {
 
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId) {
-//        lock the seat in the train service first,
+//        Check user level rate limiting
+        bookingRateLimiter.checkRateLimit(userId);
+//        lock the seats in the train service first,
 //        if the seat is not available trainServiceClient will throw
 //        SeatNotAvailableException.
-        trainServiceClient.lockSeat(request.getSeatId());
+        List<SeatResponse> lockedSeats =
+                trainServiceClient
+                        .lockSeats(request.getScheduleId(), request.getSeatClass(), request.getQuantity());
+
+        List<UUID> seatIds = lockedSeats.stream()
+                .map(SeatResponse::getId)
+                .toList();
 
         Booking booking = Booking.builder()
                 .userId(userId)
                 .scheduleId(request.getScheduleId())
-                .seatId(request.getSeatId())
+                .quantity(request.getQuantity())
+                .seatIds(seatIds)
                 .status(Booking.BookingStatus.PENDING)
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .build();
 
         Booking savedBooking = bookingRepository.save(booking);
+        log.info("Booking {} created with {} seats for user {}",
+                savedBooking.getId(), seatIds.size(), userId);
 
         return mapToBookingResponse(savedBooking);
     }
 
+    @Transactional
     public PaymentResponse cancelBooking(UUID bookingId, UUID userId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -108,12 +120,27 @@ public class BookingService {
             );
         }
 
-        log.info("3. booking is confirmed, need to cancel it.");
-
 //        cancel the booking:
-        booking.setStatus(Booking.BookingStatus.CANCELLED);
-        bookingRepository.save(booking);
-        trainServiceClient.releaseSeat(booking.getSeatId());
+//        Only cancel the booking if seats are released successfully.
+//        ISSUE in the below approach:
+//        if the seats are released, and the booking is NOT canceled
+//        it means we have seats available whose booking is still active
+//        this creates a fake booking.
+//        To avoid this we will create an intermediate
+//        state for booking: CANCELLATION_PENDING, which will be set at the start.
+//        Flow:
+//        Booking -----> CANCELLATION_PENDING
+//        if: Release seats ----> SUCCESS -----> Booking -----> CANCELLED
+//        else if: Release seats ----> FAILED -----> Booking -----> CONFIRMED
+        try {
+            booking.setStatus(Booking.BookingStatus.CANCELLED);
+            trainServiceClient.releaseSeats(booking.getSeatIds());
+            bookingRepository.save(booking);
+        } catch (Exception exception) {
+//            instead of throwing the exception we need to rollback.
+            throw new TrainServiceException(exception.getMessage());
+        }
+
 
 //        Fetch real price for refund:
         BigDecimal price = trainServiceClient.getSchedulePrice(booking.getScheduleId());
@@ -164,7 +191,7 @@ public class BookingService {
         if(paymentSuccess) {
             // first confirm the seat, if an error occurs at least
             // we won't write to the DB.
-            trainServiceClient.confirmSeat(booking.getSeatId());
+            trainServiceClient.confirmSeats(booking.getSeatIds());
             booking.setStatus(Booking.BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
 
@@ -181,7 +208,7 @@ public class BookingService {
         } else {
             booking.setStatus(Booking.BookingStatus.CANCELLED);
             bookingRepository.save(booking);
-            trainServiceClient.releaseSeat(booking.getSeatId());
+            trainServiceClient.releaseSeats(booking.getSeatIds());
 
             Payment payment = Payment.builder()
                     .booking(booking)
@@ -203,7 +230,7 @@ public class BookingService {
                 .id(booking.getId())
                 .userId(booking.getUserId())
                 .scheduleId(booking.getScheduleId())
-                .seatId(booking.getSeatId())
+                .seatIds(booking.getSeatIds())
                 .status(booking.getStatus().name())
                 .bookedAt(booking.getBookedAt())
                 .expiresAt(booking.getExpiresAt())
@@ -219,5 +246,17 @@ public class BookingService {
                 .gatewayRef(payment.getGatewayRef())
                 .paidAt(payment.getPaidAt())
                 .build();
+    }
+
+    private BookingSummaryResponse mapToBookingSummaryResponse(Booking booking) {
+        return new BookingSummaryResponse(
+                booking.getId(),
+                booking.getUserId(),
+                booking.getScheduleId(),
+                booking.getQuantity(),
+                booking.getStatus().name(),
+                booking.getBookedAt(),
+                booking.getExpiresAt()
+        );
     }
 }
