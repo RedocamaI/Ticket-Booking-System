@@ -22,11 +22,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 // TODO [Phase 3]: Implement multi-stop route support. Currently trains have a fixed
 // source and destination with no intermediate stops. A real implementation would
@@ -41,6 +39,7 @@ public class TrainService {
     private final TrainRepository trainRepository;
     private final ScheduleRepository scheduleRepository;
     private final SeatRepository seatRepository;
+    private final SeatInventoryService seatInventoryService;
 
     @Transactional
     public TrainResponse createTrain(CreateTrainRequest request) {
@@ -104,21 +103,45 @@ public class TrainService {
         // For now we are just generating half seats each for SLEEPER and AC.
 
         // auto-generate seats:
-        List<Seat> seats = Stream.of(Seat.SeatClass.SLEEPER, Seat.SeatClass.AC)
-                .flatMap(seatClass -> IntStream.rangeClosed(1, train.getTotalSeats()/2)
-                        .mapToObj(seatNumber -> Seat.builder()
+        int halfSeats = train.getTotalSeats()/2;
+
+        List<Seat> sleeperSeats = IntStream.rangeClosed(1, halfSeats)
+                        .mapToObj(num -> Seat.builder()
                                 .train(train)
                                 .schedule(savedSchedule)
-                                .seatNumber((seatClass == Seat.SeatClass.SLEEPER ? "SL-" : "AC-")
-                                    + String.format("%02d", seatNumber))
-                                .seatClass(seatClass)
+                                .seatNumber("SL-" + String.format("%02d", num))
+                                .seatClass(Seat.SeatClass.SLEEPER)
                                 .status(Seat.SeatStatus.AVAILABLE)
-                                .build()))
-                .toList();
+                                .build())
+                                .toList();
 
-        seatRepository.saveAll(seats);
+        List<Seat> acSeats = IntStream.rangeClosed(1, halfSeats)
+                        .mapToObj(num -> Seat.builder()
+                                .train(train)
+                                .schedule(savedSchedule)
+                                .seatNumber("AC-" + String.format("%02d", num))
+                                .seatClass(Seat.SeatClass.AC)
+                                .status(Seat.SeatStatus.AVAILABLE)
+                                .build())
+                                .toList();
+
+        List<Seat> savedSleeperSeats = seatRepository.saveAll(sleeperSeats);
+        List<Seat> savedAcSeats = seatRepository.saveAll(acSeats);
+
+//        Populate redis inventory
+        List<UUID> sleeperIds = savedSleeperSeats.stream()
+                        .map(Seat::getId)
+                        .toList();
+        List<UUID> acIds = savedAcSeats.stream()
+                        .map(Seat::getId)
+                        .toList();
+
+        seatInventoryService.populateSeatInventory(schedule.getId(), sleeperIds, acIds);
+
         log.info("Created schedule {} with {} seats for train {}",
-                savedSchedule.getId(), seats.size(), train.getTrainNumber());
+                savedSchedule.getId(),
+                savedAcSeats.size() + savedSleeperSeats.size(),
+                train.getTrainNumber());
 
         return mapToScheduleResponse(savedSchedule);
     }
@@ -196,31 +219,25 @@ public class TrainService {
     @Transactional
     public List<SeatResponse> lockSeats(UUID scheduleId, String seatClass, Integer quantity) {
 //        verify if schedule exists:
-        log.info("TrainService - scheduleId: {}", scheduleId);
         scheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Schedule " + scheduleId + " does not exist"
                 ));
 
-        log.info("hi1");
-//        find and lock seats automatically using SELECT FOR UPDATE SKIP LOCKED
+//        find AVAILABLE seats automatically using SELECT FOR UPDATE SKIP LOCKED
         List<UUID> seatIds = seatRepository
-                .findAndLockAvailableSeats(scheduleId, seatClass, quantity);
+                .findAvailableSeats(scheduleId, seatClass, quantity);
 
-        log.info("hi2");
         if(seatIds.size() < quantity) {
             throw new SeatNotAvailableException(
                     "Not enough seats available. Requested: " + quantity +
                             ", Available: " + seatIds.size());
         }
 
-//        update status to LOCKED
-        List<Seat> seats = seatRepository.findAllById(seatIds).stream()
-                        .peek(seat -> seat.setStatus(Seat.SeatStatus.LOCKED))
-                                .toList();
-        seatRepository.saveAll(seats);
+//        No longer setting status=LOCKED - Redis TTL is the lock now
+        List<Seat> seats = seatRepository.findAllById(seatIds);
 
-        log.info("Locked {} seats for schedule {}", seats.size(), scheduleId);
+        log.info("Found {} available seats for schedule {}", seats.size(), scheduleId);
         return seats.stream().map(this::mapToSeatResponse).toList();
     }
 
@@ -247,6 +264,20 @@ public class TrainService {
         log.info("Released {} seats", seats.size());
 
         return seats.stream().map(this::mapToSeatResponse).toList();
+    }
+
+    @Transactional
+    public void returnSeats(UUID scheduleId, String seatClass, List<UUID> seatIds) {
+//        Update DB status to AVAILABLE
+        List<Seat> seats = seatRepository.findAllById(seatIds)
+                .stream()
+                .peek(seat -> seat.setStatus(Seat.SeatStatus.AVAILABLE))
+                .toList();
+
+        seatRepository.saveAll(seats);
+        seatInventoryService.returnSeatsToInventory(scheduleId, seatClass, seatIds);
+
+        log.info("Returned {} seats to inventory for schedule {}", seats.size(), scheduleId);
     }
 
     private SeatResponse mapToSeatResponse(Seat seat) {

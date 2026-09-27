@@ -25,7 +25,7 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
         LIMIT :quantity
         FOR UPDATE SKIP LOCKED
         """, nativeQuery = true)
-    List<UUID> findAndLockAvailableSeats(
+    List<UUID> findAvailableSeats(
             @Param("scheduleId") UUID scheduleId,
             @Param("seatClass") String seatClass,
             @Param("quantity") Integer quantity

@@ -18,6 +18,7 @@ import java.util.List;
 public class BookingExpiryScheduler {
     private final BookingRepository bookingRepository;
     private final TrainServiceClient trainServiceClient;
+    private final SeatLockService seatLockService;
 
     @Scheduled(fixedDelay = 300000)
     @Transactional
@@ -41,7 +42,16 @@ public class BookingExpiryScheduler {
 
 //                Release all seats for this booking
                 if(!booking.getSeatIds().isEmpty()) {
-                    trainServiceClient.releaseSeats(booking.getSeatIds());
+//                    below will be replaced by Kafka event in the future:
+                    trainServiceClient.returnSeats(
+                            booking.getScheduleId(),
+                            booking.getSeatClass(),
+                            booking.getSeatIds());
+
+                    seatLockService.releaseSeats(
+                            booking.getScheduleId(),
+                            booking.getSeatClass(),
+                            booking.getSeatIds());
                 }
 
                 log.info("Expired booking {} cancelled and {} seats released.", booking.getId(), booking.getSeatIds().size());

@@ -3,6 +3,7 @@ CREATE TABLE bookings (
     user_id         UUID NOT NULL,
     schedule_id     UUID NOT NULL,
     quantity        INT NOT NULL DEFAULT 1,
+    seat_class       VARCHAR(20) NOT NULL DEFAULT 'SLEEPER',
     status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     booked_at       TIMESTAMP NOT NULL DEFAULT now(),
     expires_at      TIMESTAMP NOT NULL,

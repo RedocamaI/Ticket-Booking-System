@@ -1,6 +1,7 @@
 package com.redocmi.train_service.controller;
 
 import com.redocmi.train_service.dto.request.BatchSeatRequest;
+import com.redocmi.train_service.dto.request.ReturnSeatsRequest;
 import com.redocmi.train_service.dto.request.SeatIdsRequest;
 import com.redocmi.train_service.dto.response.ApiResponse;
 import com.redocmi.train_service.dto.response.SeatResponse;
@@ -38,9 +39,9 @@ public class SeatController {
                 .body(ApiResponse.success("seats fetched successfully", seats));
     }
 
-    @Operation(summary = "Lock multiple seats atomically - internal use only")
-    @PatchMapping("/internal/seats/lock-batch")
-    public ResponseEntity<ApiResponse<List<SeatResponse>>> lockSeats(@RequestBody BatchSeatRequest request) {
+    @Operation(summary = "Find multiple available seats atomically - internal use only")
+    @PatchMapping("/internal/seats/find-batch")
+    public ResponseEntity<ApiResponse<List<SeatResponse>>> findSeats(@RequestBody BatchSeatRequest request) {
         log.info("SeatController - scheduleId: {}", request.getScheduleId());
         List<SeatResponse> seats = trainService.lockSeats(
                 request.getScheduleId(),
@@ -49,7 +50,7 @@ public class SeatController {
 
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(ApiResponse.success("seat locked successfully: ", seats));
+                .body(ApiResponse.success("Available seats found successfully: ", seats));
     }
 
     @Operation(summary = "Confirm multiple seats - internal use only")
@@ -71,6 +72,20 @@ public class SeatController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(ApiResponse.success("seats released successfully: ", releasedSeats));
+    }
+
+    @Operation(summary = "Return multiple seats upon cancellation - internal use only")
+    @PatchMapping("/internal/seats/return-batch")
+    public ResponseEntity<ApiResponse<Void>> returnSeats(
+            @RequestBody ReturnSeatsRequest request) {
+        trainService.returnSeats(
+                request.getScheduleId(),
+                request.getSeatClass(),
+                request.getSeatIds());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success("Seats returned to inventory", null));
     }
 
     @GetMapping("/internal/schedules/{scheduleId}/price")

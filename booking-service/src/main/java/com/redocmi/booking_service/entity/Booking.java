@@ -32,6 +32,9 @@ public class Booking {
     @Column(nullable = false)
     private Integer quantity;
 
+    @Column(name = "seat_class", nullable = false)
+    private String seatClass;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private BookingStatus status;

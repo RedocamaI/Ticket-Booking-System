@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +31,7 @@ public class BookingService {
     private final PaymentRepository paymentRepository;
     private final TrainServiceClient trainServiceClient;
     private final BookingRateLimiter bookingRateLimiter;
+    private final SeatLockService seatLockService;
 
     @Transactional
     public BookingResponse getBookingById(UUID bookingId, UUID userId) {
@@ -70,21 +72,17 @@ public class BookingService {
     public BookingResponse createBooking(CreateBookingRequest request, UUID userId) {
 //        Check user level rate limiting
         bookingRateLimiter.checkRateLimit(userId);
-//        lock the seats in the train service first,
-//        if the seat is not available trainServiceClient will throw
-//        SeatNotAvailableException.
-        List<SeatResponse> lockedSeats =
-                trainServiceClient
-                        .lockSeats(request.getScheduleId(), request.getSeatClass(), request.getQuantity());
 
-        List<UUID> seatIds = lockedSeats.stream()
-                .map(SeatResponse::getId)
-                .toList();
+//        Acquire seats from redis: fail-closed if redis is down
+        List<UUID> seatIds = seatLockService.acquireSeats(
+                request.getScheduleId(), request.getSeatClass(),
+                request.getQuantity(), userId);
 
         Booking booking = Booking.builder()
                 .userId(userId)
                 .scheduleId(request.getScheduleId())
                 .quantity(request.getQuantity())
+                .seatClass(request.getSeatClass())
                 .seatIds(seatIds)
                 .status(Booking.BookingStatus.PENDING)
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
@@ -134,8 +132,17 @@ public class BookingService {
 //        else if: Release seats ----> FAILED -----> Booking -----> CONFIRMED
         try {
             booking.setStatus(Booking.BookingStatus.CANCELLED);
-            trainServiceClient.releaseSeats(booking.getSeatIds());
+//            below will be replaced by kafka event in the future:
+            trainServiceClient.returnSeats(
+                    booking.getScheduleId(),
+                    booking.getSeatClass(),
+                    booking.getSeatIds());
+
             bookingRepository.save(booking);
+            seatLockService.releaseSeats(
+                    booking.getScheduleId(),
+                    booking.getSeatClass(),
+                    booking.getSeatIds());
         } catch (Exception exception) {
 //            instead of throwing the exception we need to rollback.
             throw new TrainServiceException(exception.getMessage());
@@ -191,9 +198,14 @@ public class BookingService {
         if(paymentSuccess) {
             // first confirm the seat, if an error occurs at least
             // we won't write to the DB.
+//            the below call to trainService client will be
+//            replaced by kafka event in the future updates.
             trainServiceClient.confirmSeats(booking.getSeatIds());
             booking.setStatus(Booking.BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
+
+//            Delete Redis locks - seat is now permanently BOOKED in DB
+            seatLockService.confirmSeats(booking.getSeatIds());
 
             Payment payment = Payment.builder()
                     .booking(booking)
@@ -208,6 +220,7 @@ public class BookingService {
         } else {
             booking.setStatus(Booking.BookingStatus.CANCELLED);
             bookingRepository.save(booking);
+//            the below call will be replaced by kafka event in the future updates:
             trainServiceClient.releaseSeats(booking.getSeatIds());
 
             Payment payment = Payment.builder()

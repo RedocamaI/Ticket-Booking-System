@@ -1,6 +1,7 @@
 package com.redocmi.booking_service.client;
 
 import com.redocmi.booking_service.dto.request.BatchSeatRequest;
+import com.redocmi.booking_service.dto.request.ReturnSeatsRequest;
 import com.redocmi.booking_service.dto.request.SeatIdsRequest;
 import com.redocmi.booking_service.dto.response.SeatResponse;
 import com.redocmi.booking_service.dto.response.ApiResponse;
@@ -34,35 +35,6 @@ public class TrainServiceClient {
         this.objectMapper = objectMapper;
     }
 
-    public List<SeatResponse> lockSeats(UUID scheduleId, String seatClass, Integer quantity) {
-        log.info("Locking {} {} seats for schedule {}", quantity, seatClass, scheduleId);
-        try {
-            ApiResponse<List<SeatResponse>> apiResponse = restClient.patch()
-                    .uri("/api/internal/seats/lock-batch")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(new BatchSeatRequest(scheduleId, seatClass, quantity))
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (request, response) -> {
-                        int status = response.getStatusCode().value();
-                        String body = new String(response.getBody().readAllBytes());
-                        String message = extractMessage(body);
-                        log.error("Error locking seats: status={}, message={}", status, message);
-                        if(status == 423) {
-                            throw new SeatNotAvailableException(message);
-                        }
-                        throw new TrainServiceException(message);
-                    })
-                    .body(new ParameterizedTypeReference<ApiResponse<List<SeatResponse>>>() {});
-
-            return apiResponse != null ? apiResponse.getData() : List.of();
-        } catch (SeatNotAvailableException | TrainServiceException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            log.error("Unexpected error in locking seats: {}", exception.getMessage());
-            throw new TrainServiceException("Unexpected error while locking seats: " + exception.getMessage());
-        }
-    }
-
     public void confirmSeats(List<UUID> seatIds) {
         log.info("Confirming {} seats", seatIds.size());
         restClient.patch()
@@ -93,6 +65,20 @@ public class TrainServiceClient {
                 .toBodilessEntity();
 
         log.info("Seats released successfully");
+    }
+
+    public void returnSeats(UUID scheduleId, String seatClass, List<UUID> seatIds) {
+        log.info("Returning {} seats to inventory for schedule {}",
+                seatIds.size(), scheduleId);
+        restClient.patch()
+                .uri("/api/internal/seats/return-batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new ReturnSeatsRequest(scheduleId, seatClass, seatIds))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, ((request, response) -> {
+                    throw new TrainServiceException("Failed to return seats to inventory.");
+                }))
+                .toBodilessEntity();
     }
 
     public BigDecimal getSchedulePrice(UUID scheduleId) {
