@@ -5,6 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +23,21 @@ public class SeatInventoryService {
         return SEAT_INVENTORY_PREFIX + scheduleId + ":" + seatClass;
     }
 
-    public void populateSeatInventory(UUID scheduleId, List<UUID> sleeperSeatIds, List<UUID> acSeatIds) {
+    public void populateSeatInventory(
+            UUID scheduleId,
+            List<UUID> sleeperSeatIds,
+            List<UUID> acSeatIds,
+            LocalDate travelDate,
+            LocalTime departureTime) {
+//        Calculate TTL - expires at departure time on travel date
+        LocalDateTime expiry = LocalDateTime.of(travelDate, departureTime);
+        Duration ttl = Duration.between(LocalDateTime.now(), expiry);
+
+        if(ttl.isNegative() || ttl.isZero()) {
+            log.warn("Schedule: {} expired, skipping inventory population.", scheduleId);
+            return;
+        }
+
 //        Push sleeper seats:
         String sleeperKey = buildKey(scheduleId, "SLEEPER");
         String[] sleeperIds = sleeperSeatIds.stream()
@@ -27,6 +45,7 @@ public class SeatInventoryService {
                 .toArray(String[]::new);
 
         redisTemplate.opsForSet().add(sleeperKey, sleeperIds);
+        redisTemplate.expire(sleeperKey, ttl);
         log.info("Populated {} SLEEPER seats for schedule {}", sleeperIds.length, scheduleId);
 
 //        Push ac seats:
@@ -36,6 +55,7 @@ public class SeatInventoryService {
                 .toArray(String[]::new);
 
         redisTemplate.opsForSet().add(acKey, acIds);
+        redisTemplate.expire(acKey, ttl);
         log.info("Populated {} AC seats for schedule {}", acIds.length, scheduleId);
     }
 

@@ -30,4 +30,6 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
             @Param("seatClass") String seatClass,
             @Param("quantity") Integer quantity
     );
+
+    List<Seat> findByScheduleIdAndSeatClass(UUID scheduleId, Seat.SeatClass seatClass);
 }

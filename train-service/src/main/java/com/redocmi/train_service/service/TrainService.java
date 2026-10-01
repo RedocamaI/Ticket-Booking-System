@@ -18,11 +18,16 @@ import com.redocmi.train_service.repository.TrainRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -40,6 +45,8 @@ public class TrainService {
     private final ScheduleRepository scheduleRepository;
     private final SeatRepository seatRepository;
     private final SeatInventoryService seatInventoryService;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public TrainResponse createTrain(CreateTrainRequest request) {
@@ -106,37 +113,39 @@ public class TrainService {
         int halfSeats = train.getTotalSeats()/2;
 
         List<Seat> sleeperSeats = IntStream.rangeClosed(1, halfSeats)
-                        .mapToObj(num -> Seat.builder()
-                                .train(train)
-                                .schedule(savedSchedule)
-                                .seatNumber("SL-" + String.format("%02d", num))
-                                .seatClass(Seat.SeatClass.SLEEPER)
-                                .status(Seat.SeatStatus.AVAILABLE)
-                                .build())
-                                .toList();
+                .mapToObj(num -> Seat.builder()
+                        .train(train)
+                        .schedule(savedSchedule)
+                        .seatNumber("SL-" + String.format("%02d", num))
+                        .seatClass(Seat.SeatClass.SLEEPER)
+                        .status(Seat.SeatStatus.AVAILABLE)
+                        .build())
+                .toList();
 
         List<Seat> acSeats = IntStream.rangeClosed(1, halfSeats)
-                        .mapToObj(num -> Seat.builder()
-                                .train(train)
-                                .schedule(savedSchedule)
-                                .seatNumber("AC-" + String.format("%02d", num))
-                                .seatClass(Seat.SeatClass.AC)
-                                .status(Seat.SeatStatus.AVAILABLE)
-                                .build())
-                                .toList();
+                .mapToObj(num -> Seat.builder()
+                        .train(train)
+                        .schedule(savedSchedule)
+                        .seatNumber("AC-" + String.format("%02d", num))
+                        .seatClass(Seat.SeatClass.AC)
+                        .status(Seat.SeatStatus.AVAILABLE)
+                        .build())
+                .toList();
 
         List<Seat> savedSleeperSeats = seatRepository.saveAll(sleeperSeats);
         List<Seat> savedAcSeats = seatRepository.saveAll(acSeats);
 
 //        Populate redis inventory
         List<UUID> sleeperIds = savedSleeperSeats.stream()
-                        .map(Seat::getId)
-                        .toList();
+                .map(Seat::getId)
+                .toList();
         List<UUID> acIds = savedAcSeats.stream()
-                        .map(Seat::getId)
-                        .toList();
+                .map(Seat::getId)
+                .toList();
 
-        seatInventoryService.populateSeatInventory(schedule.getId(), sleeperIds, acIds);
+        seatInventoryService.populateSeatInventory(
+                schedule.getId(), sleeperIds, acIds,
+                savedSchedule.getTravelDate(), savedSchedule.getDepartureTime());
 
         log.info("Created schedule {} with {} seats for train {}",
                 savedSchedule.getId(),
@@ -182,27 +191,50 @@ public class TrainService {
     }
 
     public List<TrainSearchResponse> searchTrains(String source, String destination, LocalDate travelDate) {
+        String cacheKey = "train-search:" + source.toLowerCase() + ":" + destination.toLowerCase() + ":" + travelDate;
+
+//        check cache:
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if(cached != null) {
+            log.info("Cache hit for {}->{} on {}", source.toLowerCase(), destination.toLowerCase(), travelDate);
+            try {
+                return objectMapper.convertValue(
+                        objectMapper.readValue(cached, Object.class),
+                        new TypeReference<List<TrainSearchResponse>>() {});
+            } catch (Exception exception) {
+                log.warn("Cache serialization failed: {}", exception.getMessage());
+            }
+        }
+
+        log.info("Cache miss - querying DB for {}->{} on {}", source, destination, travelDate);
         List<Schedule> schedules = scheduleRepository.searchSchedules(source, destination, travelDate);
 
-        return schedules.stream()
-                .map(schedule -> {
-                    Long availableSeats = seatRepository.countAvailableSeatsByScheduleId(schedule.getId());
-
-                    return TrainSearchResponse.builder()
-                            .scheduleId(schedule.getId())
-                            .trainId(schedule.getTrain().getId())
-                            .trainNumber(schedule.getTrain().getTrainNumber())
-                            .trainName(schedule.getTrain().getName())
-                            .source(schedule.getTrain().getSource())
-                            .destination(schedule.getTrain().getDestination())
-                            .travelDate(schedule.getTravelDate())
-                            .departureTime(schedule.getDepartureTime())
-                            .arrivalTime(schedule.getArrivalTime())
-                            .price(schedule.getPrice())
-                            .availableSeats(availableSeats)
-                            .build();
-                })
+        List<TrainSearchResponse> results = schedules.stream()
+                .map(schedule -> TrainSearchResponse.builder()
+                        .scheduleId(schedule.getId())
+                        .trainId(schedule.getTrain().getId())
+                        .trainNumber(schedule.getTrain().getTrainNumber())
+                        .trainName(schedule.getTrain().getName())
+                        .source(schedule.getTrain().getSource())
+                        .destination(schedule.getTrain().getDestination())
+                        .travelDate(schedule.getTravelDate())
+                        .departureTime(schedule.getDepartureTime())
+                        .arrivalTime(schedule.getArrivalTime())
+                        .price(schedule.getPrice())
+                        .availableSeats(0L) // enriching in controller before returning.
+                        .build())
                 .toList();
+
+//        Store in cache
+        try {
+            String json = objectMapper.writeValueAsString(results);
+            redisTemplate.opsForValue().set(cacheKey, json, Duration.ofMinutes(5));
+            log.info("Cached {} results for key {}", results.size(), cacheKey);
+        } catch (Exception exception) {
+            log.warn("Failed to cache results: {}", exception.getMessage());
+        }
+
+        return results;
     }
 
     public List<SeatResponse> getSeatsByScheduleId(UUID scheduleId) {
@@ -295,5 +327,24 @@ public class TrainService {
         log.info("schedule price fetched successfully: {}", schedule.getPrice());
 
         return schedule.getPrice();
+    }
+
+    public void repopulateInventory(UUID scheduleId) {
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(
+                        () -> new ResourceNotFoundException("Schedule with id: " + scheduleId + " does not exist."));
+
+        List<UUID> sleeperSeatIds = seatRepository.findByScheduleIdAndSeatClass(scheduleId, Seat.SeatClass.SLEEPER)
+                .stream()
+                .map(Seat::getId)
+                .toList();
+        List<UUID> acSeatIds = seatRepository.findByScheduleIdAndSeatClass(scheduleId, Seat.SeatClass.AC)
+                .stream()
+                .map(Seat::getId)
+                .toList();
+
+        seatInventoryService.populateSeatInventory(
+                schedule.getId(), sleeperSeatIds, acSeatIds,
+                schedule.getTravelDate(), schedule.getDepartureTime());
     }
 }

@@ -6,6 +6,7 @@ import com.redocmi.train_service.dto.response.ApiResponse;
 import com.redocmi.train_service.dto.response.ScheduleResponse;
 import com.redocmi.train_service.dto.response.TrainResponse;
 import com.redocmi.train_service.dto.response.TrainSearchResponse;
+import com.redocmi.train_service.service.SeatInventoryService;
 import com.redocmi.train_service.service.TrainService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -27,6 +28,7 @@ import java.util.UUID;
 @Tag(name = "Trains", description = "Train and schedule management")
 public class TrainController {
     private final TrainService trainService;
+    private final SeatInventoryService seatInventoryService;
 
     // admin endpoints:
     @Operation(summary = "create a new train(admin only")
@@ -97,8 +99,29 @@ public class TrainController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date){
         List<TrainSearchResponse> results = trainService.searchTrains(source, destination, date);
 
+//        Enrich with live available seat counts from redis:
+        List<TrainSearchResponse> enriched = results.stream()
+                .peek(result -> {
+                    Long sleeperCount = seatInventoryService.getAvailableCount(result.getScheduleId(), "SLEEPER");
+                    Long acCount = seatInventoryService.getAvailableCount(result.getScheduleId(), "AC");
+
+                    result.setAvailableSeats(sleeperCount + acCount);
+
+                })
+                .toList();
+
         return ResponseEntity
                 .status(HttpStatus.OK)
-                .body(ApiResponse.success("Trains fetched successfully", results));
+                .body(ApiResponse.success("Trains fetched successfully", enriched));
+    }
+
+    @PostMapping("/admin/schedules/{scheduleId}/repopulate-inventory")
+    public ResponseEntity<ApiResponse<Void>> repopulateInventory(
+            @PathVariable UUID scheduleId) {
+        trainService.repopulateInventory(scheduleId);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(ApiResponse.success("Inventory repopulated.", null));
     }
 }
