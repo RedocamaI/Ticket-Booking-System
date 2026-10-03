@@ -1,6 +1,8 @@
 package com.redocmi.booking_service.service;
 
 import com.redocmi.booking_service.client.TrainServiceClient;
+import com.redocmi.booking_service.dto.event.BookingCancelledEvent;
+import com.redocmi.booking_service.dto.event.BookingConfirmedEvent;
 import com.redocmi.booking_service.dto.request.CreateBookingRequest;
 import com.redocmi.booking_service.dto.response.*;
 import com.redocmi.booking_service.entity.Booking;
@@ -32,6 +34,7 @@ public class BookingService {
     private final TrainServiceClient trainServiceClient;
     private final BookingRateLimiter bookingRateLimiter;
     private final SeatLockService seatLockService;
+    private final BookingEventPublisher eventPublisher;
 
     @Transactional
     public BookingResponse getBookingById(UUID bookingId, UUID userId) {
@@ -118,40 +121,13 @@ public class BookingService {
             );
         }
 
-//        cancel the booking:
-//        Only cancel the booking if seats are released successfully.
-//        ISSUE in the below approach:
-//        if the seats are released, and the booking is NOT canceled
-//        it means we have seats available whose booking is still active
-//        this creates a fake booking.
-//        To avoid this we will create an intermediate
-//        state for booking: CANCELLATION_PENDING, which will be set at the start.
-//        Flow:
-//        Booking -----> CANCELLATION_PENDING
-//        if: Release seats ----> SUCCESS -----> Booking -----> CANCELLED
-//        else if: Release seats ----> FAILED -----> Booking -----> CONFIRMED
-        try {
-            booking.setStatus(Booking.BookingStatus.CANCELLED);
-//            below will be replaced by kafka event in the future:
-            trainServiceClient.returnSeats(
-                    booking.getScheduleId(),
-                    booking.getSeatClass(),
-                    booking.getSeatIds());
-
-            bookingRepository.save(booking);
-            seatLockService.releaseSeats(
-                    booking.getScheduleId(),
-                    booking.getSeatClass(),
-                    booking.getSeatIds());
-        } catch (Exception exception) {
-//            instead of throwing the exception we need to rollback.
-            throw new TrainServiceException(exception.getMessage());
-        }
-
-
 //        Fetch real price for refund:
+//        Next issue: will store the price in booking table itself. No need to call train-service
+//        through REST.
         BigDecimal price = trainServiceClient.getSchedulePrice(booking.getScheduleId());
 
+        booking.setStatus(Booking.BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
 //        create a refund payment record:
         Payment refundPayment = Payment.builder()
                 .booking(booking)
@@ -162,6 +138,21 @@ public class BookingService {
                 .build();
 
         Payment savedPayment = paymentRepository.save(refundPayment);
+
+        try {
+            eventPublisher.publishBookingCancelled(BookingCancelledEvent.builder()
+                    .bookingId(booking.getId())
+                    .userID(booking.getUserId())
+                    .scheduleId(booking.getScheduleId())
+                    .seatClass(booking.getSeatClass())
+                    .seatIds(booking.getSeatIds())
+                    .build());
+            seatLockService.releaseSeats(booking.getScheduleId(), booking.getSeatClass(), booking.getSeatIds());
+        } catch (Exception exception) {
+            log.error("Kafka publish failed for cancelled booking {}. " +
+                    "Manual intervention required. SeatIds: {}", booking.getId(), booking.getSeatIds());
+            // TODO [Phase 3]: Transactional Outbox Pattern eliminates this scenario
+        }
         log.info("Booking {} cancelled and refund created for user {}", bookingId, userId);
 
         return mapToPaymentResponse(savedPayment);
@@ -196,16 +187,8 @@ public class BookingService {
 
         Payment saved;
         if(paymentSuccess) {
-            // first confirm the seat, if an error occurs at least
-            // we won't write to the DB.
-//            the below call to trainService client will be
-//            replaced by kafka event in the future updates.
-            trainServiceClient.confirmSeats(booking.getSeatIds());
             booking.setStatus(Booking.BookingStatus.CONFIRMED);
             bookingRepository.save(booking);
-
-//            Delete Redis locks - seat is now permanently BOOKED in DB
-            seatLockService.confirmSeats(booking.getSeatIds());
 
             Payment payment = Payment.builder()
                     .booking(booking)
@@ -214,6 +197,24 @@ public class BookingService {
                     .gatewayRef(UUID.randomUUID().toString())
                     .paidAt(LocalDateTime.now())
                     .build();
+
+            try {
+                eventPublisher.publishBookingConfirmed(BookingConfirmedEvent.builder()
+                        .bookingId(booking.getId())
+                        .userId(booking.getUserId())
+                        .scheduleId(booking.getScheduleId())
+                        .seatClass(booking.getSeatClass())
+                        .seatIds(booking.getSeatIds())
+                        .build());
+
+                // Only delete Redis locks after successful publish
+                seatLockService.confirmSeats(booking.getSeatIds());
+            } catch (Exception exception) {
+                log.error("Kafka publish failed for booking {}:{}", booking.getId(), exception.getMessage());
+                // Don't throw — booking is confirmed, payment taken
+                // Seats will remain in AVAILABLE state in DB until manual fix
+                // TODO [Phase 3]: Transactional Outbox Pattern eliminates this scenario
+            }
 
             saved = paymentRepository.save(payment);
             log.info("Payment successful for booking {} ", bookingId);
