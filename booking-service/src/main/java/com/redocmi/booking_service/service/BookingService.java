@@ -221,8 +221,6 @@ public class BookingService {
         } else {
             booking.setStatus(Booking.BookingStatus.CANCELLED);
             bookingRepository.save(booking);
-//            the below call will be replaced by kafka event in the future updates:
-            trainServiceClient.releaseSeats(booking.getSeatIds());
 
             Payment payment = Payment.builder()
                     .booking(booking)
@@ -232,8 +230,11 @@ public class BookingService {
                     .paidAt(LocalDateTime.now())
                     .build();
 
-            saved = paymentRepository.save(payment);
-            log.info("Payment failed for booking: {}", bookingId);
+            paymentRepository.save(payment);
+            seatLockService.releaseSeats(booking.getScheduleId(),
+                    booking.getSeatClass(), booking.getSeatIds());
+
+            return mapToPaymentResponse(payment);
         }
 
         return mapToPaymentResponse(saved);
